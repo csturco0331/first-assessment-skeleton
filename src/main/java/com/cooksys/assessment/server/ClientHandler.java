@@ -6,6 +6,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class ClientHandler implements Runnable {
 	private Logger log = LoggerFactory.getLogger(ClientHandler.class);
-
+	static Map<String, Socket> users = Collections.synchronizedMap(new HashMap<String, Socket>());
 	private Socket socket;
 
 	public ClientHandler(Socket socket) {
@@ -36,7 +39,18 @@ public class ClientHandler implements Runnable {
 
 				switch (message.getCommand()) {
 					case "connect":
-						log.info("user <{}> connected", message.getUsername());
+						log.info(message.getUsername());						
+						if(users.containsKey(message.getUsername())){
+							log.info("username <{}> already taken", message.getUsername());
+							String response = mapper.writeValueAsString(new Message(message.getUsername(), message.getCommand(), "Selected Username is already taken"));
+							writer.write(response);
+							writer.flush();
+							this.socket.close();
+							break;
+						} else {
+							log.info("user <{}> connected", message.getUsername());
+							users.put(message.getUsername(), socket);
+						}
 						break;
 					case "disconnect":
 						log.info("user <{}> disconnected", message.getUsername());
@@ -47,6 +61,12 @@ public class ClientHandler implements Runnable {
 						String response = mapper.writeValueAsString(message);
 						writer.write(response);
 						writer.flush();
+						break;
+					case "broadcast":
+						break;
+					case "users":
+						break;
+					case "@":
 						break;
 				}
 			}

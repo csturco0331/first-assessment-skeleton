@@ -6,6 +6,16 @@ public class Message {
 	private String command;
 	private String contents;
 
+	public Message() {
+		
+	}
+	
+	public Message(String username, String command, String contents) {
+		this.username = username;
+		this.command = command;
+		this.contents = contents;
+	}
+	
 	public String getUsername() {
 		return username;
 	}
