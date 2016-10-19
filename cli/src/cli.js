@@ -11,6 +11,7 @@ let previousCommand = '';
 
 cli
   .delimiter(cli.chalk['magenta']('ftd~$'))
+  .show()
 
 cli
   .mode('connect <host> <port> <username>')
