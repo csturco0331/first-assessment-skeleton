@@ -9,6 +9,9 @@ import java.net.Socket;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,9 +21,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class ClientHandler implements Runnable {
 	private Logger log = LoggerFactory.getLogger(ClientHandler.class);
-	static Map<String, Socket> users = Collections.synchronizedMap(new HashMap<String, Socket>());
+	static Map<String, Queue<Message>> users = Collections.synchronizedMap(new HashMap<String, Queue<Message>>());
 	private Socket socket;
-
+	private Queue<Message> messageQueue = new ConcurrentLinkedQueue<Message>();
+	Boolean running = true;
+	
 	public ClientHandler(Socket socket) {
 		super();
 		this.socket = socket;
@@ -33,40 +38,89 @@ public class ClientHandler implements Runnable {
 			BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 			PrintWriter writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()));
 
-			while (!socket.isClosed()) {
+			while (running) {
 				String raw = reader.readLine();
 				Message message = mapper.readValue(raw, Message.class);
-
+				String response;
+				Queue<Message> temporaryQueue;
 				switch (message.getCommand()) {
-					case "connect":
-						log.info(message.getUsername());						
+					case "connect":						
 						if(users.containsKey(message.getUsername())){
 							log.info("username <{}> already taken", message.getUsername());
-							String response = mapper.writeValueAsString(new Message(message.getUsername(), message.getCommand(), "Selected Username is already taken"));
+							response = mapper.writeValueAsString(new Message());
 							writer.write(response);
 							writer.flush();
 							this.socket.close();
 							break;
 						} else {
+							new Thread(new ClientQueue(messageQueue, socket, running, writer)).start();
+							users.put(message.getUsername(), messageQueue);
 							log.info("user <{}> connected", message.getUsername());
-							users.put(message.getUsername(), socket);
+							for(String key : users.keySet()) {
+								log.info(key + "test");
+								temporaryQueue = users.get(key);
+								temporaryQueue.add(new Message(message.getUsername(), "connection", ""));
+								synchronized (temporaryQueue) {
+									temporaryQueue.notify();
+								}
+							}
 						}
 						break;
 					case "disconnect":
 						log.info("user <{}> disconnected", message.getUsername());
+						users.remove(message.getUsername());
+						running = false;
+						for(String key : users.keySet()) {
+							temporaryQueue = users.get(key);
+							temporaryQueue.add(new Message(message.getUsername(), "disconnection", ""));
+							synchronized (temporaryQueue) {
+								temporaryQueue.notify();
+							}
+						}
+						synchronized(messageQueue) {
+							messageQueue.notify();
+						}
 						this.socket.close();
 						break;
 					case "echo":
 						log.info("user <{}> echoed message <{}>", message.getUsername(), message.getContents());
-						String response = mapper.writeValueAsString(message);
-						writer.write(response);
-						writer.flush();
+						messageQueue.add(message);
+						synchronized(messageQueue) {
+							messageQueue.notify();
+						}
 						break;
 					case "broadcast":
+						log.info("user <{}> sent message <{}> to all users", message.getUsername(), message.getCommand());
+						for(String key : users.keySet()) {
+							temporaryQueue = users.get(key);
+							temporaryQueue.add(message);
+							synchronized (temporaryQueue) {
+								temporaryQueue.notify();
+							}
+						}
 						break;
 					case "users":
+						log.info("user <{}> requested users", message.getUsername());
+						Set<String> keys = users.keySet();
+						String content = "";
+						for(String user : keys) {
+							content += "<" + user + "> ";
+						}
+						messageQueue.add(new Message(message.getUsername(), message.getCommand(), content));
+						synchronized(messageQueue) {
+							messageQueue.notify();
+						}
 						break;
 					case "@":
+						String key = message.getContents().split(" ")[0];
+						String contents = message.getContents().replaceFirst(key+" ", "");
+						log.info("user <{}> sent message <{}> to user <{}>", message.getUsername(), key, contents);
+						message.setContents(contents);
+						temporaryQueue = users.get(key);
+						temporaryQueue.add(message);
+						synchronized(temporaryQueue) {
+							temporaryQueue.notify();
+						}
 						break;
 				}
 			}

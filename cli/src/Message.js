@@ -1,6 +1,6 @@
 export class Message {
   static fromJSON (buffer) {
-    return new Message(JSON.parse(buffer.toString()))
+    return new Message(JSON.parse(buffer))
   }
 
   constructor ({ username, command, contents }) {

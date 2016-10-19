@@ -23,25 +23,34 @@ cli
     })
 
     server.on('data', (buffer) => {
-    	switch(previousCommand[0]) {
-    	  case 'e' :
+    	let message = Message.fromJSON(buffer)  	
+    	switch(message.command) {
+    	  case 'echo' :
     		  //${timestamp} <${username}> (echo): ${contents}
-    	      this.log(cli.chalk['white'](Message.fromJSON(buffer).toString()))
+    	      this.log(cli.chalk['white'](`${Date.now()}: <${message.username}> (echo): ${message.contents}`))
     	      break;
-    	  case 'b' :
+    	  case 'broadcast' :
     		  //${timestamp} <${username}> (all): ${contents}
-    	      this.log(cli.chalk['blue'](Message.fromJSON(buffer).toString()))
+    	      this.log(cli.chalk.blue(`${Date.now()}: <${message.username}> (all): ${message.contents}`))
     	      break;
-    	  case 'u' :
-    		  // ${timestamp}: currently connected users: (repeated) <${username}> `
-    	      this.log(cli.chalk['green'](Message.fromJSON(buffer).toString()))
+    	  case 'users' :
+    		  // ${timestamp}: currently connected users: (repeated) <${username}> 
+    	      this.log(cli.chalk.green(`${Date.now()}: currently connected users: ${message.contents}`))
     	      break;
     	  case '@' :
     		  // ${timestamp} <${username}> (whisper): ${contents}
-    	      this.log(cli.chalk['magenta'](Message.fromJSON(buffer).toString()))
+    	      this.log(cli.chalk.magenta(`${Date.now()}: <${message.username}> (whisper): ${message.contents}`))
     	      break;
+    	  case 'connection' :
+    		  // ${timestamp} <${username}> has connected
+    		  this.log(cli.chalk.yellow(`${Date.now()}: <${message.username}> has connected`))
+    		  break;
+    	  case 'disconnection' :
+    		  // ${timestamp} <${username}> has disconnected
+    		  this.log(cli.chalk.black.bgRed(`${Date.now()}: <${message.username}> has disconnected`))
+    		  break;
     	  default :
-    		  this.log(cli.chalk['red']('Connection to Server failed, Username already taken'))
+    		  this.log(cli.chalk.red('Connection to Server failed, Username already taken'))
     		  break;
     	}
     })
@@ -75,7 +84,7 @@ cli
       server.write(new Message({ username, command }).toJSON() + '\n')
     } else if (command[0] === '@') {
       previousCommand = command;
-      server.write(new Message({ username, command, contents: [command.splice(1), contents].join(' ') }).toJSON() + '\n')
+      server.write(new Message({ username, command: command[0], contents: [command.slice(1), contents].join(' ') }).toJSON() + '\n')
     } else if (previousCommand !== ''){
         if (previousCommand === 'disconnect') {
           server.end(new Message({ username, command: previousCommand }).toJSON() + '\n')
@@ -93,7 +102,7 @@ cli
         } else if (previousCommand === 'users') {
           server.write(new Message({ username, command: previousCommand }).toJSON() + '\n')
         } else if (previousCommand[0] === '@') {
-          server.write(new Message({ username, command: previousCommand, contents: [command, contents].join(' ') }).toJSON() + '\n')
+          server.write(new Message({ username, command: previousCommand[0], contents: [command.slice(1), contents].join(' ') }).toJSON() + '\n')
         } else {
           this.log(`Command <${command}> was not recognized`)
         }
