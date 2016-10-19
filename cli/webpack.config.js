@@ -2,7 +2,7 @@ module.exports = {
   target: 'node',
 
   entry: {
-    app: ['babel-polyfill', './src/cli.js']
+    app: ['babel-polyfill', './src/app.js']
   },
 
   output: {

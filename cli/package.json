@@ -2,7 +2,7 @@
   "name": "first-assessment-cli",
   "version": "1.0.0",
   "description": "",
-  "main": "./dist/cli.js",
+  "main": "./dist/app.js",
   "scripts": {
     "build:watch": "webpack --colors --progress --watch",
     "build": "webpack --colors --progress",

@@ -5,15 +5,25 @@ public class Message {
 	private String username;
 	private String command;
 	private String contents;
+	private String timestamp;
 
 	public Message() {
 		
 	}
 	
-	public Message(String username, String command, String contents) {
+	public Message(String username, String command, String contents, String timestamp) {
 		this.username = username;
 		this.command = command;
 		this.contents = contents;
+		this.timestamp = timestamp;
+	}
+	
+	public String getTimestamp() {
+		return timestamp;
+	}
+	
+	public void setTimestamp(String timestamp) {
+		this.timestamp = timestamp;
 	}
 	
 	public String getUsername() {
