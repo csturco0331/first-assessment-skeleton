@@ -17,6 +17,17 @@ public class ClientQueue implements Runnable {
 	Boolean running;																//running boolean passed in from the clienthandler so the handler can control the stop of this thread
 
     //=======================CONSTRUCTOR===============================
+	/**
+	 * ClientQueue constructor
+	 * 
+	 * @param messageQueue
+	 * 			the {@link Queue} handles the messages to be delivered to the client
+	 * @param running
+	 * 			a boolean that is used to determine when to close the thread. Set by the
+	 * 			client handler that created the ClientQueue
+	 * @param writer
+	 * 			buffered writer linked to the client's output stream
+	 */
 	public ClientQueue(Queue<Message> messageQueue, Boolean running, PrintWriter writer) {
 		this.messageQueue = messageQueue;
 		this.running = running;
@@ -24,6 +35,12 @@ public class ClientQueue implements Runnable {
 	}
 
 	//=======================RUN=======================================
+	/**
+	 * Checks if the messageQueue is empty. If it is, it waits for a message
+	 * then sends it to the client. Allows several messages to be entered into
+	 * the queue while still arriving to the client in an ordered manner without
+	 * blocking the messages that the user sends
+	 */
 	@Override
 	public void run() {
 		String response;																//temporary String variable
@@ -44,6 +61,8 @@ public class ClientQueue implements Runnable {
 				response = mapper.writeValueAsString(messageQueue.remove());			//get message out of the queue and parse to string
 				writer.write(response);													//write the response to the buffer
 				writer.flush();															//flush buffer to write to client
+				log.info(response);
+				Thread.sleep(5);
 			}
 		} catch (IOException e) {														//catch IO errors
 			e.printStackTrace();														//and print to stack

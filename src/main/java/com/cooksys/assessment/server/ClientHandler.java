@@ -15,11 +15,13 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.cooksys.assessment.game.Player;
+import com.cooksys.assessment.game.TicTacToe;
 import com.cooksys.assessment.model.Message;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class ClientHandler implements Runnable {
-	
+	//==============LITERALS=====================
 	private final String CONNECT = "connect";
 	private final String DISCONNECT = "disconnect";
 	private final String ECHO = "echo";
@@ -29,23 +31,36 @@ public class ClientHandler implements Runnable {
 	private final String CONNECTION = "connection";
 	private final String DISCONNECTION = "disconnection";
 	private final String TAKEN = "taken";
+	private final String TICTACSTART = "tstart";
+	private final String TICTACMOVE = "tmove";
+	private final String ERROR = "error";
+	private final String SYSTEM = "SYSTEM";
 	
+	//==============VARIABLES====================
 	private Logger log = LoggerFactory.getLogger(ClientHandler.class);				//logs information
 	private Map<String, Queue<Message>> users;										//map from server that keeps track of all connected users and their respective queues
 	private Socket socket;															//socket for connection
 	private Queue<Message> messageQueue = new ConcurrentLinkedQueue<Message>();		//individual users queue for storing messages and enforcing concurrency
 	Boolean running = true;															//running flag for while loop, specifically useful for stopping the ClientQueue thread
 	String currentUser;																//username of the current user
+	Set<TicTacToe> tictactoe;														//set of ongoing tictactoe games
 
 	//================CONSTRUCTOR=============================
-	public ClientHandler(Socket socket, Map<String, Queue<Message>> users) {
+	public ClientHandler(Socket socket, Map<String, Queue<Message>> users, Set<TicTacToe> tictactoe) {
 		super();
 		this.users = users;
 		this.socket = socket;
+		this.tictactoe = tictactoe;
 	}
 
 	//================SENDALL===============================
-	//method for commands that send a message to all the connected users
+	/**
+	 * Takes a message meant to be sent to all connected users and sends it
+	 * to each of their individual queues
+	 * 
+	 * @param message
+	 * 			{@link Message} to be sent to all connected users
+	 */
 	private void sendAll(Message message) {
 		Queue<Message> temporaryQueue;															//temporary Queue
 		for (String key : users.keySet()) {														//iterate over all users in the Map
@@ -58,6 +73,10 @@ public class ClientHandler implements Runnable {
 	}
 	
 	//================RUN=====================================
+	/**
+	 * Reads messages in from the client, parses them, then adds them
+	 * to the appropriate client's messageQueue
+	 */
 	@Override //from interface Runnable
 	public void run() {
 		try {
@@ -108,6 +127,13 @@ public class ClientHandler implements Runnable {
 					break;
 				case BROADCAST:
 					log.info("user <{}> sent message <{}> to all users", message.getUsername(), message.getCommand());	//log broadcast
+					if(users.size() == 1) {
+						messageQueue.add(new Message(SYSTEM, BROADCAST, "Dude...it's only you in here!", new Timestamp(System.currentTimeMillis()).toString()));
+						synchronized (messageQueue) {
+							messageQueue.notify();																		//notify the users ClientQueue
+						}
+						break;
+					}
 					sendAll(message);																		//Notify all users that a user has disconnected
 					break;
 				case USERS:
@@ -124,7 +150,20 @@ public class ClientHandler implements Runnable {
 					break;
 				case AT:
 					String key = message.getContents().split(" ")[0];										//remove intended user from the message contents
-					if(!users.containsKey(key)) break;														//if intended user isn't connected, break
+					if(!users.containsKey(key)) {															//if intended user isn't connected, break
+						messageQueue.add(new Message(SYSTEM, ERROR, "no user with that username connected", new Timestamp(System.currentTimeMillis()).toString()));
+						synchronized (messageQueue) {
+							messageQueue.notify();																		//notify the users ClientQueue
+						}
+						break;
+					}
+					if(key.equals(currentUser)) {
+						messageQueue.add(new Message(SYSTEM, AT, "Stop talking to yourself! It's not healthy...", new Timestamp(System.currentTimeMillis()).toString()));
+						synchronized (messageQueue) {
+							messageQueue.notify();																		//notify the users ClientQueue
+						}
+						break;
+					}
 					String contents = message.getContents().replaceFirst(key + " ", "");					//remove the intended username from the message contents
 					log.info("user <{}> sent message <{}> to user <{}>", message.getUsername(), key, contents); //log whisper
 					message.setContents(contents);															//change message contents to new contents
@@ -132,6 +171,70 @@ public class ClientHandler implements Runnable {
 					temporaryQueue.add(message);															//add the message to the intended user's queue
 					synchronized (temporaryQueue) {
 						temporaryQueue.notify();															//notify intended users ClientQueue
+					}
+					break;
+				case TICTACMOVE:
+					String password = message.getContents().split(" ")[0];									//password for getting correct game
+					if(password.equals("")) break;
+					boolean found = false;
+					for(TicTacToe game : tictactoe) {														//check each current game
+						if(game.comparePassword(password)) {												//for given password
+							found = true;
+							if(currentUser == game.getFIrstPlayer().getUsername() ||
+								currentUser == game.getSecondPlayer().getUsername()) 
+							{
+								log.info("game move made");														//log info
+								game.play(message);																//make move
+								if(game.isFinished()){
+									tictactoe.remove(game);
+									break;
+								}
+							}
+							else {
+								messageQueue.add(new Message(currentUser, TICTACMOVE, "You are not one of the players of this game", new Timestamp(System.currentTimeMillis()).toString()));
+								synchronized (messageQueue) {
+									messageQueue.notify();																		//notify the users ClientQueue
+								}
+							}
+							break;
+						}
+					}
+					if(!found) {
+						messageQueue.add(new Message(currentUser, TICTACMOVE, "The password provided matched no current game", new Timestamp(System.currentTimeMillis()).toString()));
+						synchronized (messageQueue) {
+							messageQueue.notify();																		//notify the users ClientQueue
+						}
+					}
+					break;
+				case TICTACSTART:
+					password = message.getContents();														//password for getting correct game
+					if(password.equals("")) break;
+					boolean created = false;																//temp boolean used to see if game has already been created
+					for(TicTacToe game : tictactoe) {														//check each current game
+						if(game.comparePassword(password)) {												//for given password
+							created = true;																	//set created to true
+							if(game.getSecondPlayer() == null) {											//check if a second player exists
+								if(game.getFIrstPlayer().getUsername() == currentUser)
+									messageQueue.add(new Message(currentUser, TICTACSTART, "You are already a player of this game", new Timestamp(System.currentTimeMillis()).toString()));
+								else {
+									log.info("second player added to game");									//log info
+									game.setSecondPlayer(new Player(currentUser, messageQueue));				//add current user as the second player
+									messageQueue.add(new Message(currentUser, TICTACSTART, "Added as second player to existing game", new Timestamp(System.currentTimeMillis()).toString()));
+								}
+							} else {
+								messageQueue.add(new Message(currentUser, TICTACSTART, "This game already has two players", new Timestamp(System.currentTimeMillis()).toString()));
+							}
+							break;
+						}
+					}
+					if(!created) {
+						log.info("new game created");
+						tictactoe.add(new TicTacToe(password, new Player(currentUser, messageQueue)));
+						messageQueue.add(new Message(currentUser, TICTACSTART, "game created successfully", new Timestamp(System.currentTimeMillis()).toString()));
+						
+					}
+					synchronized (messageQueue) {
+						messageQueue.notify();																		//notify the users ClientQueue
 					}
 					break;
 				}

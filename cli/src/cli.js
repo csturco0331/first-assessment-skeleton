@@ -22,6 +22,11 @@ const BLOCK = 'block'
 const UNBLOCK = 'unblock' 
 const HELP = 'help'
 const RE = 're'
+const TICTACSTART = 'tstart'
+const TICTACMOVE = 'tmove'
+const ERROR = 'error'
+const ERRORDELIM = cli.chalk.red.bold.bgBlack
+const TICTACDELIM = cli.chalk.black.bold.bgWhite
 const CLIDELIM = cli.chalk.magenta.bold('ftd~$')
 const MODEDELIM = cli.chalk.green.bold('connected>')
 const ECHODELIM = cli.chalk.white.bold
@@ -34,15 +39,17 @@ const TAKENDELIM = cli.chalk.black.bold.bgRed
 const TAKENMESSAGE = 'Connection to Server failed, Username already taken'
 const UNBLOCKMESSAGE = 'user <${temp}> is no longer blocked'
 const HELPMESSAGE =
-	'help : returns list of available commands\
-	\ndisconnect : ends connection to the server\
-	\necho : sends server a message that is then returned unchanged\
-	\nbroadcast : sends message to all connected users\
-	\nusers : returns a list of all connected users\
-	\n@username : sends private message to specified user\
-	\nre : sends private message to last user whispered with (i.e. last username to whisper you or last person you whispered)\
-	\nblock : blocks a specified user\
-	\nunblock : unblocks a specified user'
+	`${HELP} :\n	returns list of available commands\
+	\n${DISCONNECT} :\n	ends connection to the server\
+	\n${ECHO} [message]:\n	sends server a message that is then returned unchanged\
+	\n${BROADCAST} [message]:\n	sends message to all connected users\
+	\n${USERS} [message]:\n	returns a list of all connected users\
+	\n${AT}username [message]:\n	sends private message to specified user\
+	\n${RE} [message]:\n	sends private message to last user whispered with (i.e. last username to whisper you or last person you whispered)\
+	\n${BLOCK} :\n	blocks a specified user\
+	\n${UNBLOCK} :\n	unblocks a specified user\
+	\n${TICTACSTART} <password> :\n	creates or links you to a tictactoe game of the specified password\
+	\n${TICTACMOVE} <password> <int: 0-9> :\n	make a move on the tictactoe game that matches the password`
 //============================================
 //============class variables=================
 let username				//current user set on creation, used on disconnect
@@ -56,15 +63,17 @@ cli
   .delimiter(CLIDELIM) 								//changes the command prompt
 
 cli
-  .mode('connect <username> [host] [port]')			//actives a mode for vorpal : username is required, host and port are optional
+  .mode('connect <username>')						//actives a mode for vorpal : username is required, host and port are optional
+  .option('-h, --host <h>', 'IP address to connect to')
+  .option('-p, --port <p>', 'Port to use for the connect')
   .delimiter(MODEDELIM)								//changes command prompt
   .init(function (args, callback) {					//initalizing function for the 'connect' mode
     username = args.username						//username is set
-    let host = (args.host)							//host terinary check
-    	? args.host									//host provided : use inputed host
+    let host = (args.options.host)					//host terinary check
+    	? args.options.host							//host provided : use inputed host
     	: HOST										//host not provided : use default
-    let port = (args.port)							//port terinary check
-    	? args.port									//port provided : use inputed port
+    let port = (args.options.port)					//port terinary check
+    	? args.options.port							//port provided : use inputed port
     	: PORT										//port not provided : use default
     server = connect({ host, port }, () => {		//create the server connect (uses net library)
       server.write(new Message({ username, command: CONNECT, }).toJSON() + '\n')		//writes connection message to server
@@ -105,6 +114,15 @@ cli
 	    	  case TAKEN :
 	    		  this.log(TAKENDELIM(TAKENMESSAGE))
 	    		  break;
+	    	  case TICTACSTART :
+	    		  this.log(TICTACDELIM(`${message.timestamp}: <${message.username}> (tictactoe): ${message.contents}`))
+	    		  break;
+	    	  case TICTACMOVE :
+	    		  this.log(TICTACDELIM(`${message.timestamp}: <${message.username}> (tictactoe): ${message.contents}`))
+	    		  break;
+	    	  case ERROR :
+	    		  this.log(ERRORDELIM(`${message.timestamp}: <${message.username}> (error): ${message.contents}`))
+	    		  break;
 	    	}
     	}
     })
@@ -121,7 +139,17 @@ cli
     if (command === DISCONNECT) {
       previousCommand = command
       server.end(new Message({ username, command }).toJSON() + '\n')
-      
+    
+    //====================================================
+    } else if(command === TICTACSTART) {
+    	previousCommand = command
+    	server.write(new Message({ username, command, contents }).toJSON() + '\n')
+    	
+    //====================================================
+    } else if(command === TICTACMOVE) {
+    	previousCommand = command
+    	server.write(new Message({ username, command, contents }).toJSON() + '\n')
+    	
     //====================================================
     } else if (command === HELP){
       previousCommand = command
@@ -171,9 +199,17 @@ cli
     //====================================================
         if (previousCommand === DISCONNECT) {
           server.end(new Message({ username, command: previousCommand }).toJSON() + '\n')
-        
+     
     //====================================================
-        } else if (command === HELP){
+        } else if(previousCommand === TICTACSTART) {
+          server.write(new Message({ username, command: previousCommand, contents: [command, contents].join(' ') }).toJSON() + '\n')
+        	
+    //====================================================
+        } else if(previousCommand === TICTACMOVE) {
+          server.write(new Message({ username, command: previousCommand, contents: [command, contents].join(' ') }).toJSON() + '\n')
+          	
+    //====================================================
+        } else if (previousCommand === HELP){
           this.log(HELPMESSAGE)
         
     //====================================================
@@ -194,17 +230,17 @@ cli
         
     //====================================================    
         } else if (previousCommand === RE) {
-            server.write(new Message({ username, command: AT, contents: [previousWhisper, command, contents].join(' ') }).toJSON() + '\n')
+          server.write(new Message({ username, command: AT, contents: [previousWhisper, command, contents].join(' ') }).toJSON() + '\n')
         
     //====================================================    
         } else if (previousCommand === BLOCK) {
-        	blocked = [command,...blocked]
-        	this.log(`user <${command}> now blocked`)
+          blocked = [command,...blocked]
+          this.log(`user <${command}> now blocked`)
         
     //====================================================    
         } else if (previousCommand === UNBLOCK) {
-        	blocked.filter(name => name !== command)
-        	this.log(`user <${command}> is no longer blocked`)
+          blocked.filter(name => name !== command)
+          this.log(`user <${command}> is no longer blocked`)
         
     //====================================================    
         } else {
