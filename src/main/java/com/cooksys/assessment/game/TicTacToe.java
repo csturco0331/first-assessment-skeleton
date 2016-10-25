@@ -15,6 +15,7 @@ public class TicTacToe {
 	private boolean playerOnesMove;
 	private boolean finished = false;
 	final private String password;
+	private int moveCount = 0;
 	
 	public TicTacToe(String password, Player one) {
 		this.password = password;
@@ -67,6 +68,7 @@ public class TicTacToe {
 		}
 		if(playerOnesMove) xos[index] = 'X';
 		else xos[index] = 'O';
+		moveCount++;
 		String content = checkWin();
 		playerOnesMove = !playerOnesMove;
 		content = "\n_____________\n"
@@ -98,6 +100,10 @@ public class TicTacToe {
 		  ) {
 			finished = true;
 			return playerOnesMove ? one.getUsername() + " wins!\n" : two.getUsername() + " wins!";
+		}
+		if(moveCount == 9) {
+			finished = true;
+			return "Tied Game";
 		}
 		return "";
 	}

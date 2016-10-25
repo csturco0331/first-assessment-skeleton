@@ -26,10 +26,9 @@ public class ClientHandler implements Runnable {
 	private final String DISCONNECT = "disconnect";
 	private final String ECHO = "echo";
 	private final String BROADCAST = "broadcast";
+	private final String ALL = "all";
 	private final String USERS = "users";
 	private final String AT = "@";
-	private final String CONNECTION = "connection";
-	private final String DISCONNECTION = "disconnection";
 	private final String TAKEN = "taken";
 	private final String TICTACSTART = "tstart";
 	private final String TICTACMOVE = "tmove";
@@ -105,14 +104,14 @@ public class ClientHandler implements Runnable {
 						users.put(message.getUsername(), messageQueue);										//add the username and this objects messageQueue to the users map so other users can see him
 						currentUser = message.getUsername();												//set currentUser
 						log.info("user <{}> connected", message.getUsername());								//log result
-						sendAll(new Message(message.getUsername(), CONNECTION, "", new Timestamp(System.currentTimeMillis()).toString()));//Notify all users that a new user has connected
+						sendAll(new Message(message.getUsername(), CONNECT, "", new Timestamp(System.currentTimeMillis()).toString()));//Notify all users that a new user has connected
 					}
 					break;
 				case DISCONNECT:
 					log.info("user <{}> disconnected", message.getUsername());								//log disconnect
 					users.remove(message.getUsername());													//remove user from the map
 					running = false;																		//set running to false, will stop the looping of this thread and ClientQueue
-					sendAll(new Message(message.getUsername(), DISCONNECTION, "", new Timestamp(System.currentTimeMillis()).toString())); //Notify all users that a user has disconnected
+					sendAll(new Message(message.getUsername(), DISCONNECT, "", new Timestamp(System.currentTimeMillis()).toString())); //Notify all users that a user has disconnected
 					synchronized (messageQueue) {
 						messageQueue.notify();																//wake up users
 					}
@@ -125,6 +124,8 @@ public class ClientHandler implements Runnable {
 						messageQueue.notify();																//notify the queue to wake up waiting ClientQueue thread
 					}
 					break;
+				case ALL:
+					message.setCommand(BROADCAST);
 				case BROADCAST:
 					log.info("user <{}> sent message <{}> to all users", message.getUsername(), message.getCommand());	//log broadcast
 					if(users.size() == 1) {
@@ -139,11 +140,13 @@ public class ClientHandler implements Runnable {
 				case USERS:
 					log.info("user <{}> requested users", message.getUsername());							//log users
 					Set<String> keys = users.keySet();														//get all the users from the map
-					String content = "";																	//start of string
+					StringBuilder sb = new StringBuilder();
 					for (String user : keys) {																//for each user
-						content += "\n<" + user + ">";														//add user to string
+						sb.append("\n<");														//add user to string
+						sb.append(user);
+						sb.append(">");
 					}
-					messageQueue.add(new Message(message.getUsername(), message.getCommand(), content, new Timestamp(System.currentTimeMillis()).toString())); //send message to users queue
+					messageQueue.add(new Message(message.getUsername(), message.getCommand(), sb.toString(), new Timestamp(System.currentTimeMillis()).toString())); //send message to users queue
 					synchronized (messageQueue) {
 						messageQueue.notify();																//notify the users ClientQueue
 					}
